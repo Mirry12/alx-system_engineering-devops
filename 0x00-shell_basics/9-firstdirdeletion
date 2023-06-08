@@ -1,2 +1,2 @@
-#!bin/bash
+#!/bin/bash
 rdmir /tmp/my_first_directory
