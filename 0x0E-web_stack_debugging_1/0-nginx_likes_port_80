@@ -1,5 +1,33 @@
-#!/usr/bin/env bash
-# script that restores the default server port
+#!/bin/bash
 
-sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
-sudo service nginx start
+# Check if the "listen 80 default_server;" line is present and correctly configured in the default site configuration file
+if ! grep -q "listen 80 default_server;" /etc/nginx/sites-enabled/default; then
+    echo "Error: 'listen 80 default_server;' is missing or misconfigured in /etc/nginx/sites-enabled/default"
+    # Find and replace the line to bind port 80 to all IPv4 addresses in the default site configuration file
+    echo "Updating the configuration to bind port 80 to all IPv4 addresses..."
+    awk '/^server {/,/^listen \[::\]:80 default_server;/ { if ($0 ~ /^ *listen [[:digit:]]+ default_server;/) print "        listen 80 default_server;"; else print; next } 1' /etc/nginx/sites-enabled/default > /tmp/default.tmp && sudo mv /tmp/default.tmp /etc/nginx/sites-enabled/default
+fi
+
+# Check if another web server like Apache is active and using port 80
+if sudo netstat -tuln | grep -q ":80"; then
+    echo "Error: Another web server like Apache is active and using port 80"
+    # Stop the Apache service
+    echo "Stopping Apache service..."
+    sudo systemctl stop apache2
+fi
+
+# Check if Nginx is running with sudo privileges
+if ! sudo nginx -t -c /etc/nginx/nginx.conf &> /dev/null; then
+    echo "Error: Nginx is not run with sudo privileges"
+    # Restart Nginx with sudo privileges
+    echo "Restarting Nginx with sudo privileges..."
+    sudo systemctl restart nginx
+fi
+
+# Check if UFW firewall configuration is restricting Nginx from binding to port 80
+if sudo ufw status | grep -q "80/tcp"; then
+    echo "Error: UFW firewall configuration is restricting Nginx from binding to port 80"
+    # Allow incoming traffic on port 80
+    echo "Allowing incoming traffic on port 80..."
+    sudo ufw allow 80/tcp
+fi
